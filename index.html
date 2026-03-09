@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TJA オフセット一括調整ツール</title>
+    <title>段位TJA #DELAY 一括調整ツール</title>
     <style>
         :root {
             --bg-color: #f0f2f5;
@@ -53,7 +53,7 @@
         .box p { margin: 0; font-weight: bold; color: #7f8c8d; }
         
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             background: #f8f9fa;
             padding: 20px;
             border-radius: 8px;
@@ -73,20 +73,20 @@
             box-sizing: border-box;
             margin-bottom: 10px;
         }
-        .radio-group, .checkbox-group {
+        .radio-group {
             display: flex;
             gap: 20px;
             margin-top: 10px;
             margin-bottom: 15px;
         }
-        .radio-group label, .checkbox-group label {
+        .radio-group label {
             font-weight: normal;
             display: flex;
             align-items: center;
             cursor: pointer;
             margin: 0;
         }
-        .radio-group input, .checkbox-group input {
+        .radio-group input {
             transform: scale(1.2);
             margin-right: 8px;
             cursor: pointer;
@@ -144,16 +144,16 @@
 <body>
 
 <div class="container">
-    <h1>TJA オフセット一括調整ツール</h1>
+    <h1>段位TJA #DELAY 一括調整ツール</h1>
 
     <div class="box" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p>ここに TJAファイル をドラッグ＆ドロップ</p>
+        <p>ここに 段位TJAファイル をドラッグ＆ドロップ</p>
         <p style="font-size:0.85rem; font-weight:normal; margin-top:5px;">(またはクリックして選択)</p>
         <input type="file" id="fileInput" accept=".tja" style="display:none">
     </div>
 
     <div class="form-group">
-        <label>ずらす値を入力</label>
+        <label>ずらす値を入力 (ファイル内の全 #DELAY に適用)</label>
         <div class="radio-group">
             <label><input type="radio" name="unit" value="s" checked> 秒 (そのまま) で指定</label>
             <label><input type="radio" name="unit" value="ms"> ミリ秒 (ms) で指定</label>
@@ -174,14 +174,6 @@
         </div>
     </div>
 
-    <div class="form-group" style="padding: 15px;">
-        <label style="margin-bottom: 0;">変更する対象</label>
-        <div class="checkbox-group">
-            <label><input type="checkbox" id="checkOffset" checked> OFFSET: を変更</label>
-            <label><input type="checkbox" id="checkDelay" checked> #DELAY を変更</label>
-        </div>
-    </div>
-
     <button id="runBtn">一括調整して上書き保存</button>
 
     <div id="log">TJAファイルを読み込んでください...</div>
@@ -193,8 +185,6 @@
     const runBtn = document.getElementById('runBtn');
     const logArea = document.getElementById('log');
     const shiftInput = document.getElementById('shiftAmount');
-    const checkOffset = document.getElementById('checkOffset');
-    const checkDelay = document.getElementById('checkDelay');
 
     let targetFile = null;
     let fileContent = "";
@@ -238,7 +228,8 @@
                 const buffer = e.target.result;
                 const decoderSJIS = new TextDecoder('shift-jis');
                 const textSJIS = decoderSJIS.decode(buffer);
-                if (textSJIS.includes('TITLE:') || textSJIS.includes('OFFSET:')) resolve(textSJIS);
+                // 文字コード判定の簡易ロジック
+                if (textSJIS.includes('TITLE:') || textSJIS.includes('#DELAY')) resolve(textSJIS);
                 else resolve(new TextDecoder('utf-8').decode(buffer));
             };
             reader.readAsArrayBuffer(file);
@@ -258,9 +249,6 @@
         // 単位が ms の場合は秒に変換する (例: 10ms -> 0.01s)
         const unit = document.querySelector('input[name="unit"]:checked').value;
         let shiftVal = unit === 'ms' ? inputVal / 1000 : inputVal;
-
-        const applyOffset = checkOffset.checked;
-        const applyDelay = checkDelay.checked;
         
         let lines = fileContent.split(/\r?\n/);
         let modifiedCount = 0;
@@ -270,37 +258,20 @@
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i];
 
-            // OFFSET の処理
-            if (applyOffset) {
-                const offsetMatch = line.match(/^(\s*OFFSET:)\s*(-?\d+(\.\d+)?)(.*)$/i);
-                if (offsetMatch) {
-                    let oldVal = parseFloat(offsetMatch[2]);
-                    let newVal = oldVal + shiftVal;
-                    newVal = Number(newVal.toFixed(4)); // 小数点誤差を防ぐ
-                    lines[i] = offsetMatch[1] + newVal + offsetMatch[4];
-                    log(`L${i+1} [OFFSET] ${oldVal} -> ${newVal}`, 'ok');
-                    modifiedCount++;
-                    continue;
-                }
-            }
-
-            // #DELAY の処理
-            if (applyDelay) {
-                const delayMatch = line.match(/^(\s*#DELAY\s+)(-?\d+(\.\d+)?)(.*)$/i);
-                if (delayMatch) {
-                    let oldVal = parseFloat(delayMatch[2]);
-                    let newVal = oldVal + shiftVal;
-                    newVal = Number(newVal.toFixed(4)); // 小数点誤差を防ぐ
-                    lines[i] = delayMatch[1] + newVal + delayMatch[4];
-                    log(`L${i+1} [#DELAY] ${oldVal} -> ${newVal}`, 'ok');
-                    modifiedCount++;
-                    continue;
-                }
+            // #DELAY の処理のみ
+            const delayMatch = line.match(/^(\s*#DELAY\s+)(-?\d+(\.\d+)?)(.*)$/i);
+            if (delayMatch) {
+                let oldVal = parseFloat(delayMatch[2]);
+                let newVal = oldVal + shiftVal;
+                newVal = Number(newVal.toFixed(4)); // 小数点誤差を防ぐ
+                lines[i] = delayMatch[1] + newVal + delayMatch[4];
+                log(`L${i+1} [#DELAY] ${oldVal} -> ${newVal}`, 'ok');
+                modifiedCount++;
             }
         }
 
         if (modifiedCount === 0) {
-            log('変更する対象 (OFFSET または #DELAY) が見つかりませんでした。', 'err');
+            log('変更する対象 (#DELAY) が見つかりませんでした。', 'err');
             return;
         }
 
