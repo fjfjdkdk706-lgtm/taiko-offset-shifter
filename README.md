@@ -2,7 +2,7 @@
 
 段位道場などの複数曲パック（`.tja` ファイル）の `OFFSET:` および `#DELAY` を、指定した値で一括調整できるブラウザ専用ツールです。
 
-👉 **[ツールを使用する (Live Demo)](https://[ユーザー名].github.io/[リポジトリ名]/)**
+👉 **[ツールを使用する (Live Demo)]([https://fjfjdkdk706-lgtm.github.io/taiko-offset-shifter/])**
 
 ## ✨ 特徴 (Features)
 
