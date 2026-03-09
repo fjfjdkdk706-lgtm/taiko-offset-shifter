@@ -4,7 +4,7 @@
 
 「全体の音源のタイミングを変えたから、3曲まるごとオフセットをずらしたい」「曲間のDELAYの秒数もまとめて調整したい」といった場面で役立ちます。
 
-👉 **[ツールを使用する (Live Demo)](https://[ユーザー名].github.io/[リポジトリ名]/)**
+👉 **[ツールを使用する (Live Demo)](https://fjfjdkdk706-lgtm.github.io/taiko-offset-shifter/)**
 
 ## ✨ 特徴 (Features)
 
