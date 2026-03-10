@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>段位TJA #DELAY 一括調整ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
     <style>
         :root {
             --bg-color: #f0f2f5;
@@ -158,7 +159,7 @@
             <label><input type="radio" name="unit" value="s" checked> 秒 (そのまま) で指定</label>
             <label><input type="radio" name="unit" value="ms"> ミリ秒 (ms) で指定</label>
         </div>
-        <input type="number" id="shiftAmount" step="0.001" placeholder="例: 0.05 / -0.02 / 10">
+        <input type="number" id="shiftAmount" step="0.001" placeholder="例: 0.05 / -0.02">
         
         <div class="guide-box">
             <strong>💡 目安と変換式</strong><br>
@@ -185,9 +186,23 @@
     const runBtn = document.getElementById('runBtn');
     const logArea = document.getElementById('log');
     const shiftInput = document.getElementById('shiftAmount');
+    const radioUnits = document.querySelectorAll('input[name="unit"]');
 
     let targetFile = null;
     let fileContent = "";
+
+    // 単位切り替え時の表示変更
+    radioUnits.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (e.target.value === 'ms') {
+                shiftInput.placeholder = "例: 50 / -20";
+                shiftInput.step = "1";
+            } else {
+                shiftInput.placeholder = "例: 0.05 / -0.02";
+                shiftInput.step = "0.001";
+            }
+        });
+    });
 
     function log(msg, type = '') {
         const div = document.createElement('div');
@@ -197,7 +212,7 @@
         logArea.scrollTop = logArea.scrollHeight;
     }
 
-    // ファイル読み込み処理
+    // ファイル処理
     fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#27ae60'; });
     dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; });
@@ -207,7 +222,7 @@
         if(e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
     });
 
-    async function handleFile(file) {
+    function handleFile(file) {
         if (!file || !file.name.toLowerCase().endsWith('.tja')) {
             log('エラー: TJAファイルを選択してください。', 'err');
             return;
@@ -215,28 +230,25 @@
         targetFile = file;
         logArea.innerHTML = '';
         log(`読込完了: ${file.name}`, 'info');
-        
-        fileContent = await readFileContent(file);
-        runBtn.classList.add('active');
-        runBtn.textContent = "一括調整して保存";
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            // encoding.js を使って文字コードを判定・変換して読み込み
+            const uint8Array = new Uint8Array(e.target.result);
+            const detected = Encoding.detect(uint8Array);
+            const unicodeArray = Encoding.convert(uint8Array, {
+                to: 'UNICODE',
+                from: detected || 'SJIS'
+            });
+            fileContent = Encoding.codeToString(unicodeArray);
+            
+            runBtn.classList.add('active');
+            runBtn.textContent = "一括調整して保存";
+        };
+        reader.readAsArrayBuffer(file);
     }
 
-    function readFileContent(file) {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const buffer = e.target.result;
-                const decoderSJIS = new TextDecoder('shift-jis');
-                const textSJIS = decoderSJIS.decode(buffer);
-                // 文字コード判定の簡易ロジック
-                if (textSJIS.includes('TITLE:') || textSJIS.includes('#DELAY')) resolve(textSJIS);
-                else resolve(new TextDecoder('utf-8').decode(buffer));
-            };
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    // 変換処理
+    // 変換・保存処理
     runBtn.addEventListener('click', () => {
         if (!targetFile || !fileContent) return;
 
@@ -246,7 +258,6 @@
             return;
         }
 
-        // 単位が ms の場合は秒に変換する (例: 10ms -> 0.01s)
         const unit = document.querySelector('input[name="unit"]:checked').value;
         let shiftVal = unit === 'ms' ? inputVal / 1000 : inputVal;
         
@@ -258,12 +269,11 @@
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i];
 
-            // #DELAY の処理のみ
             const delayMatch = line.match(/^(\s*#DELAY\s+)(-?\d+(\.\d+)?)(.*)$/i);
             if (delayMatch) {
                 let oldVal = parseFloat(delayMatch[2]);
                 let newVal = oldVal + shiftVal;
-                newVal = Number(newVal.toFixed(4)); // 小数点誤差を防ぐ
+                newVal = Number(newVal.toFixed(4));
                 lines[i] = delayMatch[1] + newVal + delayMatch[4];
                 log(`L${i+1} [#DELAY] ${oldVal} -> ${newVal}`, 'ok');
                 modifiedCount++;
@@ -277,13 +287,21 @@
 
         log(`合計 ${modifiedCount} 箇所を書き換えました！保存します。`, 'ok');
 
-        // 文字化け対策のため、BOM付きUTF-8で保存
+        // 改行コードをCRLFに統一して文字列化
         const finalText = lines.join('\r\n');
-        const blob = new Blob(["\uFEFF" + finalText], { type: 'text/plain;charset=utf-8' });
+        
+        // encoding.js を使って Unicode から Shift-JIS に変換 (BOMなし)
+        const unicodeArrayForExport = Encoding.stringToCode(finalText);
+        const sjisArray = Encoding.convert(unicodeArrayForExport, {
+            to: 'SJIS',
+            from: 'UNICODE'
+        });
+        
+        // Uint8ArrayとしてBlobを作成 (これで純粋なShift-JISファイルになる)
+        const blob = new Blob([new Uint8Array(sjisArray)], { type: 'application/octet-stream' });
         
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        // 元のファイル名そのままに変更
         link.download = targetFile.name; 
         document.body.appendChild(link);
         link.click();
